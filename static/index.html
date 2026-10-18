@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EN ⇄ MY Translator</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Myanmar:wght@400;500;700&family=Padauk:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">ဗ</span>
+      <div>
+        <h1>EN ⇄ MY Translator</h1>
+        <p class="brand-sub">English ↔ Burmese · your key, your machine</p>
+      </div>
+    </div>
+    <div id="providerStatus" class="provider-status" aria-live="polite">Loading…</div>
+  </header>
+
+  <main class="layout">
+    <!-- ------------------------------------------------------------------ -->
+    <!-- Settings                                                            -->
+    <!-- ------------------------------------------------------------------ -->
+    <aside class="card settings">
+      <h2 class="card-title">Settings</h2>
+
+      <label class="field">
+        <span>Provider</span>
+        <select id="provider"><option value="">Loading…</option></select>
+      </label>
+
+      <div class="field">
+        <span>Model <small id="modelHint">auto</small></span>
+        <input id="model" list="modelList" placeholder="auto" autocomplete="off" />
+        <datalist id="modelList"></datalist>
+        <label class="inline check">
+          <input type="checkbox" id="autoModel" checked />
+          <span>Auto-select the best model (from your key)</span>
+        </label>
+      </div>
+
+      <div class="field">
+        <span>API key <small id="keyHint">optional if set in .env</small></span>
+        <div class="key-row">
+          <input id="apiKey" type="password" placeholder="paste key (sk-… / AIza…)"
+                 autocomplete="off" spellcheck="false" />
+          <button id="toggleKey" class="icon-btn" type="button" title="Show / hide">👁</button>
+        </div>
+        <label class="inline check">
+          <input type="checkbox" id="rememberKey" />
+          <span>Remember in this browser (saved to localStorage)</span>
+        </label>
+      </div>
+
+      <div class="field">
+        <span>Languages</span>
+        <div class="lang-row">
+          <select id="source" aria-label="Source language">
+            <option value="auto">Auto-detect</option>
+            <option value="en">English</option>
+            <option value="my">Burmese</option>
+          </select>
+          <button id="swap" class="icon-btn" type="button" title="Swap languages">⇄</button>
+          <select id="target" aria-label="Target language">
+            <option value="my">Burmese</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+      </div>
+
+      <label class="field">
+        <span>Chunk size <small>(characters per request)</small></span>
+        <input id="chunkSize" type="number" min="500" max="20000" step="500" value="4000" />
+      </label>
+
+      <label class="field">
+        <span>Glossary <small>(one per line: <code>term = ဝေါဟာရ</code>)</small></span>
+        <textarea id="glossary" rows="2" spellcheck="false"
+          placeholder="Apple = အက်ပဲလ်&#10;invoice = ငွေတောင်းခံလွှာ"></textarea>
+      </label>
+
+      <details class="advanced">
+        <summary>OCR options</summary>
+        <label class="inline">
+          <input type="checkbox" id="ocrEnabled" checked />
+          <span>OCR scanned PDFs</span>
+        </label>
+        <label class="field">
+          <span>OCR languages</span>
+          <select id="ocrLang">
+            <option value="eng">English</option>
+            <option value="mya">Burmese</option>
+            <option value="eng+mya" selected>English + Burmese</option>
+          </select>
+        </label>
+      </details>
+    </aside>
+
+    <!-- ------------------------------------------------------------------ -->
+    <!-- Source + Output                                                     -->
+    <!-- ------------------------------------------------------------------ -->
+    <section class="workspace">
+      <div class="card">
+        <div class="card-head">
+          <h2 class="card-title">Source</h2>
+          <div class="head-actions">
+            <span id="sourceCount" class="muted">0 characters</span>
+            <button id="clearSource" class="ghost-btn" type="button">Clear</button>
+          </div>
+        </div>
+
+        <div id="dropzone" class="dropzone" tabindex="0" role="button"
+             aria-label="Upload a document">
+          <input id="fileInput" type="file" hidden multiple
+                 accept=".pdf,.docx,.doc,.epub,.txt,.md,.markdown,.text" />
+          <p class="drop-title">Drop a file or click to browse</p>
+          <p class="drop-sub">PDF · Word (.docx) · ePub · TXT / Markdown</p>
+        </div>
+
+        <div id="fileList" class="file-list"></div>
+
+        <textarea id="sourceText" class="source-text" spellcheck="false"
+          placeholder="Paste English or Burmese text here, or upload a document above…"></textarea>
+
+        <div class="actions">
+          <button id="translateBtn" class="primary-btn" type="button">Translate</button>
+          <button id="stopBtn" class="danger-btn" type="button" disabled>Stop</button>
+          <div class="progress-wrap" aria-hidden="true">
+            <div id="progressBar" class="progress-bar"></div>
+          </div>
+          <span id="progressText" class="muted"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div class="tabs" role="tablist">
+            <button class="tab active" data-tab="translation" type="button">Translation</button>
+            <button class="tab" data-tab="bilingual" type="button">Bilingual</button>
+          </div>
+          <div class="head-actions">
+            <span id="resultCount" class="muted"></span>
+            <button id="copyBtn" class="ghost-btn" type="button">Copy</button>
+            <button id="txtBtn" class="ghost-btn" type="button">.txt</button>
+            <button id="docxBtn" class="ghost-btn" type="button">.docx</button>
+          </div>
+        </div>
+
+        <div id="translationPane" class="pane active">
+          <div id="translationOut" class="output my-font" data-placeholder="Translation will appear here…"></div>
+        </div>
+
+        <div id="bilingualPane" class="pane">
+          <div id="bilingualOut" class="bilingual" data-placeholder="Translate to see the side-by-side view…"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js"></script>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

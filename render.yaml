@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: en-my-translator
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    # gthread workers so streaming (SSE) and static assets do not block each
+    # other; --timeout 0 disables the worker timeout for long translations.
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --worker-class gthread --threads 8 --timeout 0
+    healthCheckPath: /
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.6"
+      - key: DEFAULT_PROVIDER
+        value: gemini
+      # Leave these blank to require a key typed in the UI (recommended for a
+      # public URL). Fill them in the Render dashboard to use server-side keys.
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-flash-latest
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+      - key: OPENROUTER_MODEL
+        value: openai/gpt-4o-mini
+      - key: TEMPERATURE
+        value: "0.2"
