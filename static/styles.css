@@ -251,6 +251,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   overflow: hidden;
 }
 .progress-bar { height: 100%; width: 0; background: var(--accent); transition: width 0.25s; }
+#progressText { white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 /* ---------------------------------------------------------------- output */
 .tabs { display: flex; gap: 4px; background: var(--surface-2); padding: 3px; border-radius: 10px; }

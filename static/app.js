@@ -572,7 +572,7 @@ async function runTranslation() {
   els.stopBtn.disabled = false;
   els.translationOut.textContent = "";
   els.bilingualOut.innerHTML = "";
-  setProgress(0, `0 / ${chunks.length}`);
+  beginProgress(chunks.length);
   els.resultCount.textContent = "";
 
   const payloadBase = {
@@ -584,7 +584,6 @@ async function runTranslation() {
     glossary: parseGlossary(),
   };
 
-  let stopped = false;
   state.currentChunk = null;
   state.livePartial = "";
   try {
@@ -592,11 +591,15 @@ async function runTranslation() {
       const chunk = chunks[i];
       state.currentChunk = chunk;
       state.livePartial = "";
+      setChunkProgress(i);
       await streamTranslate(
         { ...payloadBase, text: chunk.text },
         (delta) => {
           state.livePartial += delta;
           renderLive(state.livePartial);
+          setPartialProgress(
+            estimatePartial(state.livePartial.length, chunk.text.length)
+          );
         },
         state.abort.signal
       );
@@ -605,12 +608,12 @@ async function runTranslation() {
       state.currentChunk = null;
       renderTranslation();
       renderBilingual();
-      setProgress(((i + 1) / chunks.length) * 100, `${i + 1} / ${chunks.length}`);
+      setChunkProgress(i + 1);
     }
+    endProgress();
     toast("Translation complete");
   } catch (err) {
     if (err.name === "AbortError") {
-      stopped = true;
       // Keep whatever was produced for the in-flight chunk.
       const chunk = state.currentChunk;
       if (chunk && state.livePartial.trim()) {
@@ -618,8 +621,10 @@ async function runTranslation() {
         renderTranslation();
         renderBilingual();
       }
+      stopProgress();
       toast("Stopped");
     } else {
+      stopProgress();
       toast(err.message || "Translation failed", true);
     }
   } finally {
@@ -627,7 +632,6 @@ async function runTranslation() {
     state.abort = null;
     els.translateBtn.disabled = false;
     els.stopBtn.disabled = true;
-    if (!stopped) setProgress(100, `${chunks.length} / ${chunks.length}`);
     updateResultCount();
   }
 }
@@ -731,9 +735,97 @@ function renderBilingual() {
   }
 }
 
-function setProgress(pct, text) {
-  els.progressBar.style.width = `${Math.min(100, Math.max(0, pct))}%`;
-  if (text !== undefined) els.progressText.textContent = text;
+/* ---------------------------------------------------------------- progress */
+const progress = {
+  start: 0,
+  total: 0,
+  done: 0,
+  partial: 0,
+  active: false,
+  timer: null,
+};
+
+function fmtTime(ms) {
+  if (!isFinite(ms) || ms < 0) return "--:--";
+  const total = Math.round(ms / 1000);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+// Smooth, monotonic-within-a-chunk estimate so the bar never sits still on a
+// long single chunk. Approaches ~0.95 as output grows; resets each chunk.
+function estimatePartial(outLen, srcLen) {
+  const scale = Math.max(200, srcLen);
+  return Math.min(0.95, 1 - Math.exp(-outLen / scale));
+}
+
+function progressFraction() {
+  if (!progress.total) return 0;
+  return Math.min(1, (progress.done + progress.partial) / progress.total);
+}
+
+function renderProgressBar() {
+  els.progressBar.style.width = `${(progressFraction() * 100).toFixed(1)}%`;
+}
+
+function updateProgressText() {
+  if (!progress.active) return;
+  const elapsed = Date.now() - progress.start;
+  const pct = Math.round(progressFraction() * 100);
+  let extra = "";
+  if (progress.done > 0 && progress.done < progress.total) {
+    const perChunk = elapsed / progress.done;
+    extra = ` · ~${fmtTime(perChunk * (progress.total - progress.done))} left`;
+  } else if (progress.done < progress.total) {
+    extra = " · estimating…";
+  }
+  els.progressText.textContent =
+    `${pct}% · ${progress.done}/${progress.total} · ${fmtTime(elapsed)}${extra}`;
+}
+
+function beginProgress(total) {
+  progress.active = true;
+  progress.start = Date.now();
+  progress.total = total;
+  progress.done = 0;
+  progress.partial = 0;
+  renderProgressBar();
+  updateProgressText();
+  clearInterval(progress.timer);
+  progress.timer = setInterval(updateProgressText, 500);
+}
+
+function setChunkProgress(done) {
+  progress.done = done;
+  progress.partial = 0;
+  renderProgressBar();
+  updateProgressText();
+}
+
+function setPartialProgress(fraction) {
+  progress.partial = Math.min(0.95, Math.max(0, fraction));
+  renderProgressBar();
+}
+
+function endProgress() {
+  progress.active = false;
+  clearInterval(progress.timer);
+  progress.timer = null;
+  progress.done = progress.total;
+  progress.partial = 0;
+  els.progressBar.style.width = "100%";
+  els.progressText.textContent =
+    `100% · ${progress.total}/${progress.total} · done in ${fmtTime(Date.now() - progress.start)}`;
+}
+
+function stopProgress() {
+  progress.active = false;
+  clearInterval(progress.timer);
+  progress.timer = null;
+  const pct = Math.round(progressFraction() * 100);
+  els.progressText.textContent =
+    `stopped · ${pct}% · ${progress.done}/${progress.total} · ${fmtTime(Date.now() - progress.start)}`;
 }
 
 function updateSourceCount() {
